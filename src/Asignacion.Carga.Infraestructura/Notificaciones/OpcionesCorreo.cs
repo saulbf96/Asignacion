@@ -28,5 +28,11 @@ public sealed class OpcionesCorreo
     /// <summary>Variable de entorno que contiene la contraseña (de aplicación) de <see cref="Usuario"/>.</summary>
     public string VariableContrasena { get; set; } = "ASIGNACION_SMTP_PASSWORD";
 
+    /// <summary>
+    /// Solo para ambientes de prueba: contraseña escrita en el appsettings (archivo fuera de git).
+    /// Si la variable de entorno existe, tiene prioridad.
+    /// </summary>
+    public string Contrasena { get; set; } = string.Empty;
+
     public int TiempoEsperaSegundos { get; set; } = 30;
 }

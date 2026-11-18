@@ -1,0 +1,71 @@
+﻿=====================================================================
+ CARGA ASIGNACION - Instrucciones de uso (ambiente de PRUEBAS)
+=====================================================================
+
+QUE HACE
+  Carga a la base WFM (servidor 175.10.1.159) los archivos del dia:
+
+  1) MOVILIDAD
+     Toma de \\175.10.1.1\baz (unidad W:) el archivo del dia
+     BAZv3.2_TEMPRANA_<fecha>_<hora>.xlsx (hoja ASIGNACION) y lo carga
+     en la tabla ASIG.MOVILIDAD. No mueve ni borra nada de esa carpeta.
+
+  2) LEGAL
+     Toma TODO lo que haya en
+       \\175.10.1.1\Super_legal\PABLO ADM\CARTERAS\ASIGNACIÓN_   (unidad X:)
+     (zip con o sin contrasena, carpetas o Excel sueltos), une los
+     Descarga_cartera*.xlsx en un solo archivo, lo carga en ASIG.LEGAL,
+     lo guarda en
+       X:\PABLO ADM\CARTERAS\<MES>\Cartera_ISB_<ddMMyyyy>.xlsx
+     (crea la carpeta del mes si no existe) y al terminar BIEN vacia
+     la carpeta ASIGNACIÓN_. Si algo falla, no se borra nada.
+
+ANTES DE USARLO (una sola vez)
+  - Copiar esta carpeta completa a la laptop (por ejemplo C:\CargaAsignacion).
+  - No hace falta instalar nada (el .exe ya incluye todo).
+  - El usuario de Windows debe poder abrir \\175.10.1.1\baz y
+    \\175.10.1.1\Super_legal, y la laptop debe llegar al servidor 175.10.1.159.
+
+COMO SE EJECUTA
+  Doble clic en:   Asignacion.Carga.exe
+    -> procesa MOVILIDAD y LEGAL con la fecha de hoy, al final dice si termino bien
+       y espera una tecla para cerrar la ventana.
+    (Esta carpeta ya viene configurada para PRUEBAS: "Ambiente": "Pruebas" en appsettings.json)
+
+  Opciones (abrir una consola en esta carpeta y escribir):
+    Asignacion.Carga.exe --fuente 1                 solo MOVILIDAD
+    Asignacion.Carga.exe --fuente 2                 solo LEGAL
+    Asignacion.Carga.exe --fecha 2026-11-18         otro dia (formato yyyy-MM-dd)
+    Asignacion.Carga.exe --fuente 1 --forzar        vuelve a cargar aunque ya estuviera cargado
+    Asignacion.Carga.exe --sin-pausa                no espera tecla al final (para tareas programadas)
+    Asignacion.Carga.exe --ayuda                    muestra la ayuda
+
+RESULTADO
+  Codigo 0 = termino bien (o el archivo ya estaba cargado y no se volvio a cargar)
+  Codigo 1 = hubo un error (revisar el correo y la carpeta logs)
+  Codigo 2 = parametros mal escritos
+  Codigo 3 = no hubo archivo del dia
+
+  Correos: llegan avisos de INICIO, FIN, ERROR, SIN ARCHIVO y YA CARGADO
+  a los correos configurados en la tabla ASIG.CONFIG_NOTIFICACION.
+  Remitente: saulbf675@gmail.com (si no llegan, revisar la carpeta de spam).
+
+  Detalle de cada ejecucion: carpeta logs\carga-<fecha>.log (se guardan 60 dias).
+
+  Historial en la base:
+    EXEC ASIG.SP_CARGA @Accion = 'CONSULTAR_BITACORA', @IdFuente = 1;   -- MOVILIDAD
+    EXEC ASIG.SP_CARGA @Accion = 'CONSULTAR_BITACORA', @IdFuente = 2;   -- LEGAL
+
+PREGUNTAS FRECUENTES
+  * "Ya estaba cargado": se volvio a ejecutar el mismo dia; no se duplico nada.
+    Para recargar a proposito usar --forzar (MOVILIDAD).
+  * LEGAL "Sin archivo": la carpeta ASIGNACIÓN_ estaba vacia.
+  * LEGAL no pudo guardar el Cartera_ISB: alguien lo tiene abierto en Excel; cerrarlo
+    y volver a ejecutar (la carpeta de entrada no se borro).
+  * Cambiar rutas, correos o el nombre del archivo: se hace en la base
+    (ASIG.CONFIG_FUENTE y ASIG.CONFIG_NOTIFICACION), no en el programa.
+
+IMPORTANTE
+  appsettings.Pruebas.json contiene contrasenas (base de datos, correo y zip).
+  No reenviar esta carpeta fuera del equipo ni subirla a lugares publicos.
+=====================================================================

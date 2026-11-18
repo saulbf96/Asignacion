@@ -55,9 +55,14 @@ public class ProcesarCargaCasoUsoTests
                     .Returns(Task.CompletedTask);
     }
 
-    private ProcesarCargaCasoUso Crear() => new(
-        _config.Object, _bitacora.Object, _carga.Object, _buscador.Object, _lector.Object, _notificador.Object,
-        new GeneradorNotificaciones(), TimeProvider.System, NullLogger<ProcesarCargaCasoUso>.Instance);
+    private ProcesarCargaCasoUso Crear()
+    {
+        var cargador = new CargadorArchivo(_config.Object, _lector.Object, _carga.Object, NullLogger<CargadorArchivo>.Instance);
+        var avisador = new AvisadorCarga(_config.Object, _notificador.Object, NullLogger<AvisadorCarga>.Instance);
+        var diario = new ProcesadorArchivoDiario(_buscador.Object, _bitacora.Object, cargador, avisador,
+            new GeneradorNotificaciones(), NullLogger<ProcesadorArchivoDiario>.Instance);
+        return new ProcesarCargaCasoUso(_config.Object, [diario], TimeProvider.System, NullLogger<ProcesarCargaCasoUso>.Instance);
+    }
 
     private Task<IReadOnlyList<ResultadoProceso>> Ejecutar(bool forzar = false) =>
         Crear().EjecutarAsync(new SolicitudCarga(1, Hoy, forzar));

@@ -19,7 +19,7 @@ internal sealed class RepositorioBitacoraSql : IRepositorioBitacora
             {
                 p.Agregar("@IdFuente", SqlDbType.Int, idFuente);
                 p.Agregar("@ArchivoOrigen", SqlDbType.VarChar, archivo.Nombre, 260);
-                p.Agregar("@RutaArchivo", SqlDbType.VarChar, archivo.Carpeta, 500);
+                p.Agregar("@RutaArchivo", SqlDbType.NVarChar, archivo.Carpeta.Recortar(500), 500);
                 p.Agregar("@FechaArchivo", SqlDbType.Date, archivo.FechaArchivo.ToDateTime(TimeOnly.MinValue));
                 p.Agregar("@Forzar", SqlDbType.Bit, forzar);
             },
@@ -53,7 +53,7 @@ internal sealed class RepositorioBitacoraSql : IRepositorioBitacora
             {
                 p.Agregar("@IdFuente", SqlDbType.Int, idFuente);
                 p.Agregar("@ArchivoOrigen", SqlDbType.VarChar, archivoOPatron.Recortar(260), 260);
-                p.Agregar("@RutaArchivo", SqlDbType.VarChar, ruta.Recortar(500), 500);
+                p.Agregar("@RutaArchivo", SqlDbType.NVarChar, ruta.Recortar(500), 500);
                 p.Agregar("@FechaArchivo", SqlDbType.Date, fecha.ToDateTime(TimeOnly.MinValue));
                 p.Agregar("@Estatus", SqlDbType.VarChar, MapeoEstatus.Codigo(estatus), 15);
                 p.Agregar("@MensajeError", SqlDbType.NVarChar, mensaje.Recortar(MaxMensaje), MaxMensaje);

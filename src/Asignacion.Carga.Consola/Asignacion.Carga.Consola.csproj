@@ -16,11 +16,13 @@
   <ItemGroup>
     <!-- La configuración viaja junto al .exe -->
     <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="LEEME.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>Asignacion.Carga</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

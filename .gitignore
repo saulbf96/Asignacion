@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Configuracion de pruebas con contrasenas: solo en la maquina, nunca en git
+src/Asignacion.Carga.Consola/appsettings.Pruebas.json

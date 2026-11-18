@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Asignacion.Carga.Aplicacion.CasosUso;
 
 namespace Asignacion.Carga.Consola;
@@ -8,10 +8,13 @@ namespace Asignacion.Carga.Consola;
 ///   --fuente N          solo esa fuente (por omisión, todas las activas)
 ///   --fecha yyyy-MM-dd  día del archivo a buscar (por omisión, hoy)
 ///   --forzar            recarga aunque el archivo ya esté cargado
-///   --ambiente NOMBRE   usa appsettings.NOMBRE.json (por omisión Local)
+///   --ambiente NOMBRE   usa appsettings.NOMBRE.json (si no se indica: variable ASIGNACION_AMBIENTE
+///                       o "Ambiente" del appsettings.json; si tampoco, Local)
+///   --sin-pausa         no espera una tecla al terminar (para jobs)
 ///   --ayuda             muestra la ayuda
 /// </summary>
-public sealed record ArgumentosConsola(SolicitudCarga Solicitud, string Ambiente, bool MostrarAyuda)
+/// <param name="Ambiente">Null = no se indicó por parámetro ni variable de entorno.</param>
+public sealed record ArgumentosConsola(SolicitudCarga Solicitud, string? Ambiente, bool MostrarAyuda, bool SinPausa = false)
 {
     public const string AmbientePorOmision = "Local";
 
@@ -21,7 +24,8 @@ public sealed record ArgumentosConsola(SolicitudCarga Solicitud, string Ambiente
           --fuente N          Procesa solo la fuente N (por omisión: todas las activas)
           --fecha yyyy-MM-dd  Día del archivo a buscar (por omisión: hoy)
           --forzar            Vuelve a cargar aunque el archivo ya esté cargado
-          --ambiente NOMBRE   Usa appsettings.NOMBRE.json (por omisión: Local)
+          --ambiente NOMBRE   Usa appsettings.NOMBRE.json (por omisión: el "Ambiente" del appsettings.json)
+          --sin-pausa         No espera una tecla al terminar (usar en jobs / tareas programadas)
           --ayuda             Muestra esta ayuda
 
         Códigos de salida:
@@ -37,7 +41,8 @@ public sealed record ArgumentosConsola(SolicitudCarga Solicitud, string Ambiente
         DateOnly? fecha = null;
         var forzar = false;
         var ayuda = false;
-        var ambiente = Environment.GetEnvironmentVariable("ASIGNACION_AMBIENTE") ?? AmbientePorOmision;
+        var sinPausa = false;
+        var ambiente = Environment.GetEnvironmentVariable("ASIGNACION_AMBIENTE");
         resultado = null!;
         error = null;
 
@@ -64,6 +69,9 @@ public sealed record ArgumentosConsola(SolicitudCarga Solicitud, string Ambiente
                 case "--forzar":
                     forzar = true;
                     break;
+                case "--sin-pausa":
+                    sinPausa = true;
+                    break;
                 case "--ayuda" or "-h" or "--help" or "/?":
                     ayuda = true;
                     break;
@@ -72,7 +80,7 @@ public sealed record ArgumentosConsola(SolicitudCarga Solicitud, string Ambiente
             }
         }
 
-        resultado = new ArgumentosConsola(new SolicitudCarga(fuente, fecha, forzar), ambiente, ayuda);
+        resultado = new ArgumentosConsola(new SolicitudCarga(fuente, fecha, forzar), ambiente, ayuda, sinPausa);
         return true;
     }
 

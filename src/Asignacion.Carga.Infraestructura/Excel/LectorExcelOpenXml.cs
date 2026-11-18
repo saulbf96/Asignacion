@@ -71,8 +71,11 @@ internal sealed partial class LectorExcelOpenXml : ILectorArchivo
         return lista;
     }
 
-    /// <summary>Libro abierto con lo necesario para interpretar las celdas de una hoja.</summary>
-    private sealed class LibroAbierto : IDisposable
+    /// <summary>
+    /// Libro abierto con lo necesario para interpretar las celdas de una hoja.
+    /// También lo usa el unificador para leer los archivos de entrada.
+    /// </summary>
+    internal sealed class LibroAbierto : IDisposable
     {
         private readonly FileStream _flujo;
         private readonly SpreadsheetDocument _documento;

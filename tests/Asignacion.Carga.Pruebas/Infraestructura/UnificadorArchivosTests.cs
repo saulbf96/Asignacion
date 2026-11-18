@@ -1,0 +1,181 @@
+﻿using Asignacion.Carga.Dominio.Entidades;
+using Asignacion.Carga.Dominio.Enums;
+using Asignacion.Carga.Dominio.Excepciones;
+using Asignacion.Carga.Infraestructura.Archivos;
+using Asignacion.Carga.Infraestructura.Excel;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
+using ICSharpCode.SharpZipLib.Zip;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
+namespace Asignacion.Carga.Pruebas.Infraestructura;
+
+public class UnificadorArchivosTests : IDisposable
+{
+    private const string Variable = "ASIGNACION_ZIP_PASSWORD_PRUEBA";
+    private const string Contrasena = "clave-de-prueba";
+    private const string Encabezado = "CLIENTE_UNICO|NOMBRE_CTE|GESTORES|TIPO_GESTION_|FECHA_ASIGNACION|SALDO";
+    private static readonly DateOnly Hoy = new(2026, 11, 18);
+
+    private readonly string _raiz = Directory.CreateTempSubdirectory("asig_unif_").FullName;
+    private readonly string _entrada;
+    private readonly string _salida;
+    private readonly UnificadorArchivos _unificador;
+
+    public UnificadorArchivosTests()
+    {
+        _entrada = Directory.CreateDirectory(Path.Combine(_raiz, "ASIGNACIÓN_")).FullName;
+        _salida = Path.Combine(_raiz, "CARTERAS", "{MES}");
+        Environment.SetEnvironmentVariable(Variable, Contrasena);
+        _unificador = new UnificadorArchivos(
+            Options.Create(new OpcionesUnificacion { VariableContrasena = Variable, CarpetaTemporal = Path.Combine(_raiz, "tmp") }),
+            NullLogger<UnificadorArchivos>.Instance);
+    }
+
+    public void Dispose()
+    {
+        Environment.SetEnvironmentVariable(Variable, null);
+        try { Directory.Delete(_raiz, recursive: true); } catch { /* temporal */ }
+    }
+
+    private ConfiguracionFuente Fuente(bool borrar = true) => new(
+        2, "LEGAL", _entrada, "*.xlsx", "CARTERA", 1, "ASIG.LEGAL", 5000, TipoProceso.Unificar,
+        "|", _salida, "Cartera_ISB_{ddMMyyyy}.xlsx", "Cartera", "TIPO_GESTION_>GESTORES", borrar);
+
+    [Fact]
+    public async Task Unifica_zip_AES_anidado_carpeta_y_sueltos_sin_repetir_y_corrige_GESTORES()
+    {
+        // scl: 2 filas (una con GESTORES corrido a TIPO_GESTION_) | smart: 1 fila
+        var scl = Excel(Path.Combine(_raiz, "src", "Descarga_cartera281.xlsx"),
+            "1-1-1|ANA|BANCO AZTECA||30/08/2026|19771", "1-1-2|LUIS||MAXIMUS|29/06/2026|49259.13");
+        var smart = Excel(Path.Combine(_raiz, "src", "Descarga_cartera0.xlsx"), "1-1-3|EVA|HIBRIDO||10/10/2026|0");
+
+        // Zip cifrado (AES) que trae dentro otro zip cifrado con scl: como "LEGAL ENCRIP 18.zip"
+        var interno = ZipAes(Path.Combine(_raiz, "src", "Lote_Segmento_28.zip"), scl);
+        ZipAes(Path.Combine(_entrada, "LEGAL ENCRIP 18.zip"), interno);
+        // El mismo scl, ya descomprimido en una carpeta: debe tomarse UNA sola vez
+        Directory.CreateDirectory(Path.Combine(_entrada, "legal 18", "scl"));
+        File.Copy(scl, Path.Combine(_entrada, "legal 18", "scl", "Descarga_cartera281.xlsx"));
+        // smart suelto + un temporal de Office que debe ignorarse
+        File.Copy(smart, Path.Combine(_entrada, "Descarga_cartera0.xlsx"));
+        File.WriteAllText(Path.Combine(_entrada, "~$Descarga_cartera0.xlsx"), "bloqueo");
+
+        var u = await _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None);
+
+        Assert.NotNull(u);
+        Assert.Equal(2, u.ArchivosUnificados);
+        Assert.Equal(1, u.ArchivosRepetidos);
+        Assert.Equal(3, u.Filas);
+        Assert.Equal(3, u.Entradas.Count); // zip, carpeta y suelto (el ~$ no cuenta)
+        Assert.Equal("Cartera_ISB_18112026.xlsx", u.Destino.Nombre);
+        Assert.EndsWith(Path.Combine("CARTERAS", "NOVIEMBRE"), u.Destino.Carpeta);
+
+        // El unificado se lee como cualquier Excel: columnas normales, GESTORES corregido
+        var lector = new LectorExcelOpenXml();
+        var encabezados = await lector.LeerEncabezadosAsync(u.Lectura, "Cartera", 1, CancellationToken.None);
+        var filas = await lector.LeerFilasAsync(u.Lectura, "Cartera", 1, CancellationToken.None).ToListAsync();
+        Assert.Equal(Encabezado.Split('|'), encabezados);
+        var luis = filas.Single(f => (string?)f.Valores["CLIENTE_UNICO"] == "1-1-2");
+        Assert.Equal("MAXIMUS", luis.Valores["GESTORES"]);
+        Assert.Null(luis.Valores.GetValueOrDefault("TIPO_GESTION_")); // quedó en blanco
+        Assert.Equal(49259.13, luis.Valores["SALDO"]);               // número de verdad en Excel
+        Assert.Equal(new DateTime(2026, 6, 29), luis.Valores["FECHA_ASIGNACION"]); // fecha de verdad en Excel
+
+        // Publicar crea la carpeta del mes; vaciar deja la entrada limpia (menos el ~$)
+        await _unificador.PublicarAsync(u, CancellationToken.None);
+        Assert.True(File.Exists(u.Destino.RutaCompleta));
+        Assert.Empty(await _unificador.VaciarEntradaAsync(u, CancellationToken.None));
+        Assert.Equal(["~$Descarga_cartera0.xlsx"], Directory.EnumerateFileSystemEntries(_entrada).Select(Path.GetFileName));
+
+        await _unificador.DescartarTemporalesAsync(u);
+        Assert.False(Directory.Exists(u.CarpetaTemporal));
+    }
+
+    [Fact]
+    public async Task Entrada_vacia_devuelve_null()
+    {
+        Assert.Null(await _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Zip_cifrado_sin_contrasena_da_error_claro_y_no_toca_la_entrada()
+    {
+        Environment.SetEnvironmentVariable(Variable, null);
+        var x = Excel(Path.Combine(_raiz, "src", "a.xlsx"), "1|A|B||01/01/2026|1");
+        ZipAes(Path.Combine(_entrada, "LEGAL ENCRIP.zip"), x);
+
+        var ex = await Assert.ThrowsAsync<DominioException>(() => _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None));
+
+        Assert.Contains("contraseña", ex.Message);
+        Assert.True(File.Exists(Path.Combine(_entrada, "LEGAL ENCRIP.zip")));
+    }
+
+    [Fact]
+    public async Task Archivos_con_distintos_encabezados_no_se_unifican()
+    {
+        Excel(Path.Combine(_entrada, "a.xlsx"), "1|A|B||01/01/2026|1");
+        ExcelConEncabezado(Path.Combine(_entrada, "b.xlsx"), "CLIENTE_UNICO|OTRA", "1|X");
+
+        var ex = await Assert.ThrowsAsync<DominioException>(() => _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None));
+
+        Assert.Contains("mismos encabezados", ex.Message);
+    }
+
+    [Fact]
+    public async Task Fila_con_campos_de_mas_o_de_menos_detiene_la_unificacion()
+    {
+        Excel(Path.Combine(_entrada, "a.xlsx"), "1|A|B||01/01/2026|1", "2|SOLO-DOS");
+
+        var ex = await Assert.ThrowsAsync<DominioException>(() => _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None));
+
+        Assert.Contains("fila 3", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("19771", true)]
+    [InlineData("-106.40616", true)]
+    [InlineData("0", true)]
+    [InlineData("00127041", false)]          // cero a la izquierda: texto
+    [InlineData("127972010127128992", false)] // 18 dígitos: texto
+    [InlineData("N/A", false)]
+    public void Escritor_solo_convierte_a_numero_lo_que_Excel_no_echaria_a_perder(string valor, bool esNumero)
+    {
+        var celda = EscritorExcelOpenXml.Celda(valor);
+
+        Assert.Equal(esNumero, celda.DataType is null && celda.StyleIndex is null);
+    }
+
+    // ---------- ayudantes ----------
+
+    private static string Excel(string ruta, params string[] filas) => ExcelConEncabezado(ruta, Encabezado, filas);
+
+    private static string ExcelConEncabezado(string ruta, string encabezado, params string[] filas)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ruta)!);
+        using var doc = SpreadsheetDocument.Create(ruta, SpreadsheetDocumentType.Workbook);
+        var libro = doc.AddWorkbookPart();
+        libro.Workbook = new Workbook(new Sheets());
+        var hoja = libro.AddNewPart<WorksheetPart>();
+        var datos = new SheetData();
+        uint n = 1;
+        foreach (var texto in new[] { encabezado }.Concat(filas))
+            datos.Append(new Row(new Cell { DataType = CellValues.InlineString, InlineString = new InlineString(new Text(texto)) }) { RowIndex = n++ });
+        hoja.Worksheet = new Worksheet(datos);
+        libro.Workbook.Sheets!.Append(new Sheet { Name = "CARTERA", SheetId = 1, Id = libro.GetIdOfPart(hoja) });
+        return ruta;
+    }
+
+    private static string ZipAes(string ruta, string archivo)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ruta)!);
+        using (var zip = new ZipOutputStream(File.Create(ruta)) { Password = Contrasena })
+        {
+            zip.PutNextEntry(new ZipEntry(Path.GetFileName(archivo)) { AESKeySize = 256 });
+            using (var f = File.OpenRead(archivo)) f.CopyTo(zip);
+            zip.CloseEntry();
+        }
+        return ruta;
+    }
+}

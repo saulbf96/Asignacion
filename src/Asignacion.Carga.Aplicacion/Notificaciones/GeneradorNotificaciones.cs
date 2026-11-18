@@ -56,6 +56,49 @@ public sealed class GeneradorNotificaciones
         return Crear(TipoNotificacion.Exitoso, fuente, asunto, [.. datos]);
     }
 
+    public Notificacion InicioUnificado(ConfiguracionFuente fuente, ArchivoUnificado u, InicioCarga inicio)
+    {
+        var datos = new List<(string, string)>
+        {
+            ("Archivo", u.Destino.Nombre),
+            ("Entrada", $"{fuente.RutaOrigen} ({u.Entradas.Count} elemento(s): {string.Join(", ", u.Entradas.Select(Path.GetFileName))})"),
+            ("Archivos unificados", Numero(u.ArchivosUnificados)),
+            ("Filas unificadas", Numero(u.Filas)),
+            ("Id de carga", inicio.IdCarga.ToString(CultureInfo.InvariantCulture)),
+        };
+        if (u.ArchivosRepetidos > 0)
+            datos.Add(("Aviso", $"{u.ArchivosRepetidos} archivo(s) venían repetidos (p. ej. en el zip y en la carpeta); se tomaron una sola vez"));
+        if (inicio.FilasAnterioresEliminadas > 0)
+            datos.Add(("Recarga", $"se reemplazan {Numero(inicio.FilasAnterioresEliminadas)} filas de la carga anterior de este archivo"));
+
+        return Crear(TipoNotificacion.Inicio, fuente, $"Inició la carga de {u.Destino.Nombre}", [.. datos]);
+    }
+
+    public Notificacion ExitosoUnificado(
+        ConfiguracionFuente fuente, ResultadoCarga r, ArchivoUnificado u, bool borrarEntrada, IReadOnlyList<string> noBorrados)
+    {
+        var entrada = !borrarEntrada ? "no se vacía (BORRAR_ENTRADA = 0)"
+            : noBorrados.Count == 0 ? "vaciada"
+            : $"NO se pudo borrar: {string.Join(", ", noBorrados.Select(Path.GetFileName))}";
+
+        var datos = new List<(string, string)>
+        {
+            ("Resultado", r.EstaCompleta ? "Carga terminada correctamente." : "Carga terminada, pero NO coinciden las filas leídas con las insertadas."),
+            ("Archivo", r.ArchivoOrigen),
+            ("Guardado en", u.Destino.RutaCompleta),
+            ("Archivos unificados", Numero(u.ArchivosUnificados)),
+            ("Filas leídas", Numero(r.FilasLeidas)),
+            ("Filas insertadas", Numero(r.FilasInsertadas)),
+            ("Carpeta de entrada", entrada),
+            ("Duración", Duracion(r.Duracion)),
+            ("Id de carga", r.IdCarga.ToString(CultureInfo.InvariantCulture)),
+        };
+        var asunto = !r.EstaCompleta ? $"Revisar: carga incompleta de {r.ArchivoOrigen}"
+            : noBorrados.Count > 0 ? $"Terminó la carga de {r.ArchivoOrigen} (revisar carpeta de entrada)"
+            : $"Terminó la carga de {r.ArchivoOrigen}";
+        return Crear(TipoNotificacion.Exitoso, fuente, asunto, [.. datos]);
+    }
+
     public Notificacion Error(ConfiguracionFuente fuente, string? archivo, string mensaje, long? idCarga) =>
         Crear(TipoNotificacion.Error, fuente, $"ERROR en la carga{(archivo is null ? "" : $" de {archivo}")}",
             ("Resultado", "La carga falló. No quedaron datos a medias; en la siguiente ejecución se reintenta."),
