@@ -11,13 +11,15 @@ namespace Asignacion.Carga.Infraestructura;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registra las implementaciones reales: SQL Server (ASIG.SP_CARGA), disco/red, Excel y correo.
-    /// Lee las secciones "BaseDatos" y "Correo" de la configuración.
+    /// Registra las implementaciones reales: SQL Server (ASIG.SP_CARGA), disco/red, Excel, zip y correo.
+    /// Lee las secciones "BaseDatos", "Correo" y "Unificacion" de la configuración.
     /// </summary>
     public static IServiceCollection AgregarInfraestructura(this IServiceCollection services, IConfiguration configuracion)
     {
         services.Configure<OpcionesBaseDatos>(configuracion.GetSection(OpcionesBaseDatos.Seccion));
         services.Configure<OpcionesCorreo>(configuracion.GetSection(OpcionesCorreo.Seccion));
+        services.Configure<OpcionesUnificacion>(configuracion.GetSection(OpcionesUnificacion.Seccion));
+        services.AddSingleton<IUnificadorArchivos, UnificadorArchivos>();
 
         services.AddSingleton<EjecutorSpCarga>();
         services.AddSingleton<IRepositorioConfiguracion, RepositorioConfiguracionSql>();

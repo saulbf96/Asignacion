@@ -1,6 +1,7 @@
 using System.Data;
 using Asignacion.Carga.Aplicacion.Interfaces;
 using Asignacion.Carga.Dominio.Entidades;
+using Asignacion.Carga.Dominio.Enums;
 using Asignacion.Carga.Dominio.Excepciones;
 using Microsoft.Extensions.Logging;
 
@@ -28,8 +29,22 @@ internal sealed class RepositorioConfiguracionSql : IRepositorioConfiguracion
                 r.Valor<string>("HOJA")!,
                 r.GetInt32(r.GetOrdinal("FILA_ENCABEZADO")),
                 r.Valor<string>("TABLA_DESTINO")!,
-                r.GetInt32(r.GetOrdinal("TAMANO_LOTE"))),
+                r.GetInt32(r.GetOrdinal("TAMANO_LOTE")),
+                TipoProceso(r.Valor<string>("TIPO_PROCESO")),
+                r.Valor<string>("SEPARADOR"),
+                r.Valor<string>("RUTA_SALIDA"),
+                r.Valor<string>("NOMBRE_SALIDA"),
+                r.Valor<string>("HOJA_SALIDA"),
+                r.Valor<string>("CORRECCION_COLUMNAS"),
+                r.GetBoolean(r.GetOrdinal("BORRAR_ENTRADA"))),
             ct);
+
+    private static TipoProceso TipoProceso(string? codigo) => codigo?.Trim().ToUpperInvariant() switch
+    {
+        null or "" or "ARCHIVO_DIARIO" => Dominio.Enums.TipoProceso.ArchivoDiario,
+        "UNIFICAR" => Dominio.Enums.TipoProceso.Unificar,
+        _ => throw new ConfiguracionInvalidaException($"TIPO_PROCESO desconocido en CONFIG_FUENTE: '{codigo}'.")
+    };
 
     public async Task<IReadOnlyList<Destinatario>> ObtenerDestinatariosAsync(int idFuente, CancellationToken ct)
     {

@@ -62,9 +62,10 @@ internal sealed class NotificadorCorreoMailKit : INotificador
     private string Contrasena()
     {
         var valor = Environment.GetEnvironmentVariable(_opciones.VariableContrasena);
+        if (string.IsNullOrWhiteSpace(valor)) valor = _opciones.Contrasena;
         if (string.IsNullOrWhiteSpace(valor))
             throw new InvalidOperationException(
-                $"No está definida la variable de entorno '{_opciones.VariableContrasena}' con la contraseña de '{_opciones.Usuario}'.");
+                $"No hay contraseña para '{_opciones.Usuario}': defina la variable de entorno '{_opciones.VariableContrasena}' o '{OpcionesCorreo.Seccion}:Contrasena' en el appsettings.");
         return valor.Replace(" ", ""); // Google muestra la contraseña de aplicación con espacios
     }
 

@@ -12,6 +12,13 @@ public static class DependencyInjection
     {
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<GeneradorNotificaciones>();
+        services.AddTransient<AvisadorCarga>();
+        services.AddTransient<CargadorArchivo>();
+
+        // Un procesador por tipo de proceso (CONFIG_FUENTE.TIPO_PROCESO)
+        services.AddTransient<IProcesadorFuente, ProcesadorArchivoDiario>();
+        services.AddTransient<IProcesadorFuente, ProcesadorUnificado>();
+
         services.AddTransient<ProcesarCargaCasoUso>();
         return services;
     }

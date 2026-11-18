@@ -122,5 +122,6 @@ public class CargaCompletaSqlTests
             Tipos.Add(notificacion.Tipo);
             return Task.CompletedTask;
         }
+
     }
 }
