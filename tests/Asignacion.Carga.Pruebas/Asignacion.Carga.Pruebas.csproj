@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\Asignacion.Carga.Aplicacion\Asignacion.Carga.Aplicacion.csproj" />
     <ProjectReference Include="..\..\src\Asignacion.Carga.Dominio\Asignacion.Carga.Dominio.csproj" />
     <ProjectReference Include="..\..\src\Asignacion.Carga.Infraestructura\Asignacion.Carga.Infraestructura.csproj" />
+    <ProjectReference Include="..\..\src\Asignacion.Carga.Consola\Asignacion.Carga.Consola.csproj" />
   </ItemGroup>
 
 </Project>
