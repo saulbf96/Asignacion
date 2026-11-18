@@ -4,7 +4,8 @@ namespace Asignacion.Carga.Dominio.Servicios;
 
 /// <summary>
 /// Verifica que el archivo traiga todos los encabezados esperados.
-/// La comparación ignora mayúsculas/minúsculas y espacios al inicio o al final.
+/// La comparación distingue mayúsculas/minúsculas (el SP lee el JSON por nombre exacto)
+/// y solo ignora espacios al inicio o al final.
 /// Encabezados de más no son error (se ignoran al insertar).
 /// </summary>
 public static class ValidadorEncabezados
@@ -14,7 +15,7 @@ public static class ValidadorEncabezados
     {
         var presentes = new HashSet<string>(
             encontrados.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e!.Trim()),
-            StringComparer.OrdinalIgnoreCase);
+            StringComparer.Ordinal);
 
         return esperados
             .Select(e => e.Trim())

@@ -8,13 +8,21 @@ public class ValidadorEncabezadosTests
     private static readonly string[] Esperados = ["Actividad", "IDUnico", "id Campania"];
 
     [Fact]
-    public void Sin_faltantes_no_lanza_aunque_cambien_mayusculas_y_espacios()
+    public void Sin_faltantes_ignora_espacios_y_columnas_extra()
     {
-        var encontrados = new[] { " actividad ", "IDUNICO", "id Campania", "Columna Extra" };
+        var encontrados = new[] { " Actividad ", "IDUnico", "id Campania", "Columna Extra" };
 
         var faltantes = ValidadorEncabezados.ObtenerFaltantes(Esperados, encontrados);
 
         Assert.Empty(faltantes);
+    }
+
+    [Fact]
+    public void Distingue_mayusculas_porque_el_SP_lee_el_JSON_por_nombre_exacto()
+    {
+        var encontrados = new[] { "Actividad", "IDUNICO", "id Campania" };
+
+        Assert.Equal(["IDUnico"], ValidadorEncabezados.ObtenerFaltantes(Esperados, encontrados));
     }
 
     [Fact]
