@@ -1,3 +1,11 @@
 <Solution>
-  <Project Path="Asignacion.Carga/Asignacion.Carga.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/Asignacion.Carga.Aplicacion/Asignacion.Carga.Aplicacion.csproj" />
+    <Project Path="src/Asignacion.Carga.Consola/Asignacion.Carga.Consola.csproj" />
+    <Project Path="src/Asignacion.Carga.Dominio/Asignacion.Carga.Dominio.csproj" />
+    <Project Path="src/Asignacion.Carga.Infraestructura/Asignacion.Carga.Infraestructura.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Asignacion.Carga.Pruebas/Asignacion.Carga.Pruebas.csproj" />
+  </Folder>
 </Solution>
