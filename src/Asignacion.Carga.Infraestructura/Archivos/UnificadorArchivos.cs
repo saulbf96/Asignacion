@@ -17,7 +17,8 @@ namespace Asignacion.Carga.Infraestructura.Archivos;
 ///   (p. ej. por "|"), se separan; si ya viene en columnas, se toman tal cual.
 /// - Todos deben traer los mismos encabezados.
 /// - Un Excel idéntico que aparece más de una vez (en el zip y en la carpeta) se toma una sola vez.
-/// - Se aplican las correcciones de columnas (p. ej. TIPO_GESTION_>GESTORES).
+/// - Se aplican las correcciones de columnas de CONFIG_FUENTE y las reglas de la fuente del appsettings
+///   (LEGAL: el mismo proceso del Power Query DETALLE_CARTERA_V2 de WFM; ver <see cref="TransformadorCartera"/>).
 /// Todo se hace en una carpeta temporal: la entrada no se toca hasta <see cref="VaciarEntradaAsync"/>.
 /// </summary>
 internal sealed class UnificadorArchivos : IUnificadorArchivos
@@ -99,23 +100,55 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
         var temporal = CrearCarpetaTemporal(fuente);
         try
         {
-            var excels = ReunirExcel(entradas, Path.Combine(temporal, "entrada"), ct);
+            var extraidos = Path.Combine(temporal, "entrada");
+            var excels = ReunirExcel(fuente, entradas, extraidos, ct);
             var (unicos, repetidos) = SinRepetidos(excels, ct);
             if (unicos.Count == 0)
                 throw new DominioException($"En '{fuente.RutaOrigen}' hay {entradas.Count} elemento(s), pero ningún Excel (.xlsx) para unificar.");
             if (repetidos > 0)
                 _log.LogWarning("{Repetidos} Excel venían repetidos (mismo contenido); se toman una sola vez.", repetidos);
 
+            var reglas = _opciones.ReglasDe(fuente.Nombre);
+
+            // Cada Excel con su grupo (SCL, SMART...). Se procesan en el orden de los grupos: con duplicados, gana el primero.
+            var clasificador = new ClasificadorGrupos(reglas.Grupos);
+            var archivos = unicos
+                .Select(e => (Ruta: e, Relativa: RutaRelativa(e, fuente.RutaOrigen, extraidos)))
+                .Select(a => (a.Ruta, a.Relativa, Grupo: clasificador.Clasificar(a.Relativa)))
+                .OrderBy(a => clasificador.Orden(a.Grupo))
+                .ThenBy(a => a.Relativa, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var a in archivos)
+                _log.LogInformation("Unificando {Archivo}{Grupo}", a.Relativa, a.Grupo is null ? "" : $" ({a.Grupo.Nombre})");
+
             var encabezados = EncabezadosComunes(fuente, unicos, fecha, ct);
             var corrector = new CorrectorColumnas(encabezados, fuente.CorreccionesColumnas);
+            var transformador = new TransformadorCartera(encabezados, reglas);
+            var detector = new DetectorFilasRepetidas(transformador.IndicesDuplicado);
+            var porGrupo = new Dictionary<string, int>(StringComparer.Ordinal);
             var movidos = 0;
 
             var rutaUnificado = Path.Combine(temporal, nombreSalida);
-            var filas = EscritorExcelOpenXml.Escribir(rutaUnificado, fuente.HojaSalida, encabezados,
-                FilasDe(fuente, unicos, encabezados, corrector, fecha, m => movidos += m, ct), ct);
+            var filas = EscritorExcelOpenXml.Escribir(rutaUnificado, fuente.HojaSalida, transformador.Encabezados,
+                FilasDe(fuente, archivos.Select(a => (a.Ruta, a.Grupo)).ToList(), encabezados, corrector, fecha, m => movidos += m, ct)
+                    .Select(f => (Campos: transformador.Transformar(f.Campos, f.Grupo), f.Grupo))
+                    .Where(f => f.Campos is not null && detector.EsNueva(f.Campos))
+                    .Select(f =>
+                    {
+                        if (f.Grupo is not null) porGrupo[f.Grupo.Nombre] = porGrupo.GetValueOrDefault(f.Grupo.Nombre) + 1;
+                        return f.Campos!;
+                    }), ct, transformador.Resaltadas, transformador.Tipos);
 
             if (corrector.TieneCorrecciones)
                 _log.LogInformation("Correcciones de columnas aplicadas en {Movidos} fila(s).", movidos);
+            if (transformador.FilasExcluidas > 0)
+                _log.LogWarning("{Excluidas} fila(s) descartadas por las reglas de la fuente (p. ej. CAMPANIA QUEJA/CLON).", transformador.FilasExcluidas);
+            if (transformador.EncabezadosRepetidos > 0)
+                _log.LogInformation("{Encabezados} fila(s) repetían el encabezado a media hoja; se descartaron.", transformador.EncabezadosRepetidos);
+            if (detector.Repetidas > 0)
+                _log.LogWarning("{Repetidas} fila(s) repetidas; se dejó la primera de cada una.", detector.Repetidas);
+            foreach (var (grupo, n) in porGrupo)
+                _log.LogInformation("Filas finales {Grupo}: {Filas}", grupo, n);
 
             var ahora = DateTime.Now;
             return new ArchivoUnificado(
@@ -126,6 +159,9 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
                 ArchivosUnificados: unicos.Count,
                 ArchivosRepetidos: repetidos,
                 Filas: filas,
+                FilasRepetidas: detector.Repetidas,
+                FilasExcluidas: transformador.FilasExcluidas,
+                FilasPorGrupo: porGrupo,
                 CarpetaTemporal: temporal);
         }
         catch
@@ -136,17 +172,20 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
     }
 
     /// <summary>Todos los .xlsx de la entrada: sueltos, dentro de carpetas o dentro de zip (se extraen al temporal).</summary>
-    private List<string> ReunirExcel(IReadOnlyList<string> entradas, string extraidos, CancellationToken ct)
+    private List<string> ReunirExcel(ConfiguracionFuente fuente, IReadOnlyList<string> entradas, string extraidos, CancellationToken ct)
     {
         var contrasena = Environment.GetEnvironmentVariable(_opciones.VariableContrasena);
         if (string.IsNullOrEmpty(contrasena)) contrasena = string.IsNullOrEmpty(_opciones.Contrasena) ? null : _opciones.Contrasena;
         var excels = new List<string>();
         var n = 0;
 
+        // Se extrae conservando la carpeta donde venía el zip y con el nombre del zip al inicio
+        // (el número al final solo evita choques): así el grupo (scl, smart, LT..._Segmento...) se sigue reconociendo.
         void ExtraerZip(string zip)
         {
             _log.LogInformation("Extrayendo {Zip}", zip);
-            ExtractorZip.Extraer(zip, Path.Combine(extraidos, $"{n++:00}_{Path.GetFileNameWithoutExtension(zip)}"), contrasena, ct);
+            var carpeta = Path.GetDirectoryName(Path.GetRelativePath(fuente.RutaOrigen, zip)) ?? "";
+            ExtractorZip.Extraer(zip, Path.Combine(extraidos, carpeta, $"{Path.GetFileNameWithoutExtension(zip)}__{n++:00}"), contrasena, ct);
         }
 
         foreach (var entrada in entradas)
@@ -203,11 +242,15 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
         return comunes!;
     }
 
-    private static IEnumerable<string?[]> FilasDe(
-        ConfiguracionFuente fuente, IReadOnlyList<string> excels, string[] encabezados, CorrectorColumnas corrector,
+    /// <summary>Ruta del Excel relativa a la entrada (si vino en un zip, relativa a la carpeta donde se extrajo).</summary>
+    private static string RutaRelativa(string excel, string rutaOrigen, string extraidos) =>
+        Path.GetRelativePath(excel.StartsWith(extraidos + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? extraidos : rutaOrigen, excel);
+
+    private static IEnumerable<(string?[] Campos, GrupoArchivos? Grupo)> FilasDe(
+        ConfiguracionFuente fuente, IReadOnlyList<(string Ruta, GrupoArchivos? Grupo)> excels, string[] encabezados, CorrectorColumnas corrector,
         DateOnly fecha, Action<int> movidos, CancellationToken ct)
     {
-        foreach (var excel in excels)
+        foreach (var (excel, grupo) in excels)
         {
             using var libro = Abrir(excel, fuente, fecha);
             foreach (var (numero, celdas) in libro.Filas(ct))
@@ -220,7 +263,7 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
                         $"'{Path.GetFileName(excel)}', fila {numero}: trae {campos.Length} campos y se esperaban {encabezados.Length}. No se unificó nada.");
 
                 movidos(corrector.Aplicar(campos));
-                yield return campos;
+                yield return (campos, grupo);
             }
         }
     }

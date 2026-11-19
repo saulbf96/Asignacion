@@ -30,7 +30,7 @@ public class ProcesadorUnificadoTests
     private readonly ArchivoUnificado _unificado = new(
         new ArchivoOrigen("Cartera_ISB_18112026.xlsx", @"C:\temp\x", Hoy, DateTime.Now),
         new ArchivoOrigen("Cartera_ISB_18112026.xlsx", @"\\srv\CARTERAS\NOVIEMBRE", Hoy, DateTime.Now),
-        "Cartera", [@"\\srv\ASIGNACIÓN_\legal 18.zip", @"\\srv\ASIGNACIÓN_\legal 18"], 13, 13, 3, @"C:\temp\x");
+        "Cartera", [@"\\srv\ASIGNACIÓN_\legal 18.zip", @"\\srv\ASIGNACIÓN_\legal 18"], 13, 13, 3, 0, 0, new Dictionary<string, int>(), @"C:\temp\x");
 
     public ProcesadorUnificadoTests()
     {
