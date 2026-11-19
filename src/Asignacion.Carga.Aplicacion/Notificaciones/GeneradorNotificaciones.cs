@@ -66,10 +66,14 @@ public sealed class GeneradorNotificaciones
             ("Filas unificadas", Numero(u.Filas)),
             ("Id de carga", inicio.IdCarga.ToString(CultureInfo.InvariantCulture)),
         };
+        if (u.FilasPorGrupo.Count > 0)
+            datos.Insert(4, ("Filas por grupo", string.Join(" · ", u.FilasPorGrupo.Select(g => $"{g.Key}: {Numero(g.Value)}"))));
         if (u.ArchivosRepetidos > 0)
             datos.Add(("Aviso", $"{u.ArchivosRepetidos} archivo(s) venían repetidos (p. ej. en el zip y en la carpeta); se tomaron una sola vez"));
         if (u.FilasRepetidas > 0)
-            datos.Add(("Filas repetidas", $"{Numero(u.FilasRepetidas)} fila(s) venían repetidas (todos los campos iguales, p. ej. la misma cuenta en dos segmentos); se dejó una sola de cada una"));
+            datos.Add(("Filas repetidas", $"{Numero(u.FilasRepetidas)} fila(s) repetidas (p. ej. la misma cuenta en dos segmentos); se dejó la primera de cada una"));
+        if (u.FilasExcluidas > 0)
+            datos.Add(("Filas excluidas", $"{Numero(u.FilasExcluidas)} fila(s) descartadas por las reglas (p. ej. CAMPANIA QUEJA/CLON)"));
         if (inicio.FilasAnterioresEliminadas > 0)
             datos.Add(("Recarga", $"se reemplazan {Numero(inicio.FilasAnterioresEliminadas)} filas de la carga anterior de este archivo"));
 

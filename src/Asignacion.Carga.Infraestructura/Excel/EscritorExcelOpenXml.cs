@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Asignacion.Carga.Dominio.Entidades;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -15,9 +16,15 @@ namespace Asignacion.Carga.Infraestructura.Excel;
 internal static partial class EscritorExcelOpenXml
 {
     private const uint EstiloFecha = 1;
+    private const uint EstiloResaltado = 2;
+    private const string VerdeResaltado = "FFB4E5A2"; // el verde claro de las columnas que WFM llena a mano
+    private static readonly DateTime FechaMinimaExcel = new(1900, 3, 1);
 
     /// <summary>Escribe el archivo y devuelve las filas de datos escritas.</summary>
-    public static int Escribir(string ruta, string nombreHoja, IReadOnlyList<string> encabezados, IEnumerable<string?[]> filas, CancellationToken ct)
+    /// <param name="resaltados">Posiciones (base 0) de los encabezados que se pintan de verde.</param>
+    /// <param name="tipos">Tipo de cada columna (null = decide por el valor). Texto se escribe siempre como texto; Entero/Decimal como número.</param>
+    public static int Escribir(string ruta, string nombreHoja, IReadOnlyList<string> encabezados, IEnumerable<string?[]> filas, CancellationToken ct,
+        IReadOnlySet<int>? resaltados = null, IReadOnlyList<TipoColumna?>? tipos = null)
     {
         var escritas = 0;
         using var documento = SpreadsheetDocument.Create(ruta, SpreadsheetDocumentType.Workbook);
@@ -27,12 +34,16 @@ internal static partial class EscritorExcelOpenXml
         var estilos = libro.AddNewPart<WorkbookStylesPart>();
         estilos.Stylesheet = new Stylesheet(
             new Fonts(new Font()),
-            new Fills(new Fill(new PatternFill { PatternType = PatternValues.None }), new Fill(new PatternFill { PatternType = PatternValues.Gray125 })),
+            new Fills(
+                new Fill(new PatternFill { PatternType = PatternValues.None }),
+                new Fill(new PatternFill { PatternType = PatternValues.Gray125 }),
+                new Fill(new PatternFill(new ForegroundColor { Rgb = VerdeResaltado }) { PatternType = PatternValues.Solid })),
             new Borders(new Border()),
             new CellStyleFormats(new CellFormat { NumberFormatId = 0, FontId = 0, FillId = 0, BorderId = 0 }),
             new CellFormats(
                 new CellFormat { NumberFormatId = 0, FontId = 0, FillId = 0, BorderId = 0, FormatId = 0 },
-                new CellFormat { NumberFormatId = 14, FontId = 0, FillId = 0, BorderId = 0, FormatId = 0, ApplyNumberFormat = true }), // 14 = fecha corta
+                new CellFormat { NumberFormatId = 14, FontId = 0, FillId = 0, BorderId = 0, FormatId = 0, ApplyNumberFormat = true }, // 14 = fecha corta
+                new CellFormat { NumberFormatId = 0, FontId = 0, FillId = 2, BorderId = 0, FormatId = 0, ApplyFill = true }),          // encabezado verde
             new CellStyles(new CellStyle { Name = "Normal", FormatId = 0, BuiltinId = 0 }));
 
         var parteHoja = libro.AddNewPart<WorksheetPart>();
@@ -42,7 +53,12 @@ internal static partial class EscritorExcelOpenXml
             w.WriteStartElement(new SheetData());
 
             w.WriteStartElement(new Row());
-            foreach (var e in encabezados) w.WriteElement(Texto(e));
+            for (var i = 0; i < encabezados.Count; i++)
+            {
+                var celda = Texto(encabezados[i]);
+                if (resaltados?.Contains(i) == true) celda.StyleIndex = EstiloResaltado;
+                w.WriteElement(celda);
+            }
             w.WriteEndElement();
 
             foreach (var fila in filas)
@@ -50,7 +66,7 @@ internal static partial class EscritorExcelOpenXml
                 ct.ThrowIfCancellationRequested();
                 w.WriteStartElement(new Row());
                 for (var i = 0; i < encabezados.Count; i++)
-                    w.WriteElement(Celda(i < fila.Length ? fila[i] : null));
+                    w.WriteElement(Celda(i < fila.Length ? fila[i] : null, tipos is not null && i < tipos.Count ? tipos[i] : null));
                 w.WriteEndElement();
                 escritas++;
             }
@@ -64,15 +80,25 @@ internal static partial class EscritorExcelOpenXml
         return escritas;
     }
 
-    internal static Cell Celda(string? valor)
+    internal static Cell Celda(string? valor, TipoColumna? tipo = null)
     {
         if (string.IsNullOrEmpty(valor)) return new Cell();
+
+        switch (tipo)
+        {
+            case TipoColumna.Texto:
+                return Texto(valor);
+            case TipoColumna.Entero or TipoColumna.Decimal:
+                // ya viene normalizado; más de 15 dígitos enteros se queda como texto para no perderlos (p. ej. CLAVE_SPEI)
+                return NumeroTipado().IsMatch(valor) ? new Cell { CellValue = new CellValue(valor) } : Texto(valor);
+        }
 
         if (NumeroLimpio().IsMatch(valor))
             return new Cell { CellValue = new CellValue(valor) };
 
         if (FechaDmy().IsMatch(valor) &&
-            DateTime.TryParseExact(valor, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha))
+            DateTime.TryParseExact(valor, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha) &&
+            fecha >= FechaMinimaExcel) // p. ej. 01/01/0001: Excel no lo representa (saldría 00/01/1900); queda como texto
             return new Cell { CellValue = new CellValue(fecha.ToOADate().ToString(CultureInfo.InvariantCulture)), StyleIndex = EstiloFecha };
 
         return Texto(valor);
@@ -87,6 +113,10 @@ internal static partial class EscritorExcelOpenXml
     /// <summary>Entero o decimal sin ceros a la izquierda y con máximo 15 dígitos enteros.</summary>
     [GeneratedRegex(@"^-?(0|[1-9]\d{0,14})(\.\d{1,10})?$")]
     private static partial Regex NumeroLimpio();
+
+    /// <summary>Número ya normalizado de una columna Entero/Decimal: máximo 15 dígitos enteros, decimales sin límite.</summary>
+    [GeneratedRegex(@"^-?\d{1,15}(\.\d+)?$")]
+    private static partial Regex NumeroTipado();
 
     [GeneratedRegex(@"^\d{2}/\d{2}/\d{4}$")]
     private static partial Regex FechaDmy();

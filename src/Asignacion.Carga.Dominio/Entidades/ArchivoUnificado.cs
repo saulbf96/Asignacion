@@ -9,8 +9,10 @@ namespace Asignacion.Carga.Dominio.Entidades;
 /// <param name="Entradas">Lo que había en la carpeta de entrada (zip, carpetas, archivos) y se borrará al terminar.</param>
 /// <param name="ArchivosUnificados">Excel distintos que se unieron.</param>
 /// <param name="ArchivosRepetidos">Excel idénticos encontrados más de una vez (p. ej. en el zip y en la carpeta) que se tomaron una sola vez.</param>
-/// <param name="Filas">Filas de datos del unificado (ya sin las repetidas).</param>
-/// <param name="FilasRepetidas">Filas idénticas en TODOS sus campos a otra ya tomada (p. ej. la misma cuenta en dos segmentos); se dejó una sola.</param>
+/// <param name="Filas">Filas de datos del unificado (ya sin las repetidas ni las excluidas).</param>
+/// <param name="FilasRepetidas">Filas repetidas según la regla de la fuente (p. ej. mismo CLIENTE_UNICO en SCL y SMART); se dejó la primera.</param>
+/// <param name="FilasExcluidas">Filas descartadas por las reglas (p. ej. CAMPANIA QUEJA/CLON).</param>
+/// <param name="FilasPorGrupo">Filas finales por grupo de archivos (p. ej. SCL, SMART); vacío si la fuente no usa grupos.</param>
 /// <param name="CarpetaTemporal">Carpeta de trabajo que se borra al final.</param>
 public sealed record ArchivoUnificado(
     ArchivoOrigen Lectura,
@@ -21,6 +23,8 @@ public sealed record ArchivoUnificado(
     int ArchivosRepetidos,
     int Filas,
     int FilasRepetidas,
+    int FilasExcluidas,
+    IReadOnlyDictionary<string, int> FilasPorGrupo,
     string CarpetaTemporal)
 {
     /// <summary>El unificado siempre lleva los encabezados en la fila 1.</summary>
