@@ -39,8 +39,8 @@ public sealed class ProcesadorUnificado : ProcesadorFuenteBase
             if (unificado is null)
                 return await SinArchivoAsync(fuente, fecha, fuente.RutaOrigen, destinatarios, ct);
 
-            Log.LogInformation("Unificados {Archivos} archivos ({Repetidos} repetidos omitidos), {Filas} filas, desde {Entradas} elemento(s) de entrada.",
-                unificado.ArchivosUnificados, unificado.ArchivosRepetidos, unificado.Filas, unificado.Entradas.Count);
+            Log.LogInformation("Unificados {Archivos} archivos ({Repetidos} repetidos omitidos), {Filas} filas ({FilasRepetidas} filas repetidas omitidas), desde {Entradas} elemento(s) de entrada.",
+                unificado.ArchivosUnificados, unificado.ArchivosRepetidos, unificado.Filas, unificado.FilasRepetidas, unificado.Entradas.Count);
 
             // 2. Registrar inicio. Si el usuario dejó archivos nuevos, se vuelve a cargar aunque ya exista el del día.
             inicio = await Bitacora.IniciarCargaAsync(fuente.IdFuente, unificado.Destino, forzar: true, ct);

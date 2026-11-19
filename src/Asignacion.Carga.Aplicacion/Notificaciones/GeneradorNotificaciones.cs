@@ -68,6 +68,8 @@ public sealed class GeneradorNotificaciones
         };
         if (u.ArchivosRepetidos > 0)
             datos.Add(("Aviso", $"{u.ArchivosRepetidos} archivo(s) venían repetidos (p. ej. en el zip y en la carpeta); se tomaron una sola vez"));
+        if (u.FilasRepetidas > 0)
+            datos.Add(("Filas repetidas", $"{Numero(u.FilasRepetidas)} fila(s) venían repetidas (todos los campos iguales, p. ej. la misma cuenta en dos segmentos); se dejó una sola de cada una"));
         if (inicio.FilasAnterioresEliminadas > 0)
             datos.Add(("Recarga", $"se reemplazan {Numero(inicio.FilasAnterioresEliminadas)} filas de la carga anterior de este archivo"));
 

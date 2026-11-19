@@ -20,4 +20,17 @@ public sealed class OpcionesUnificacion
 
     /// <summary>Carpeta de trabajo; vacío = carpeta temporal de Windows.</summary>
     public string CarpetaTemporal { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Columnas que se agregan al archivo de salida solo con encabezado y en blanco, por nombre de fuente
+    /// (p. ej. "LEGAL"). No se insertan en la tabla: solo van en el Excel.
+    /// </summary>
+    public Dictionary<string, ColumnasEnBlanco> ColumnasEnBlanco { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>Columnas en blanco de una fuente: se insertan, en este orden, después de <see cref="DespuesDe"/>.</summary>
+public sealed class ColumnasEnBlanco
+{
+    public string DespuesDe { get; set; } = string.Empty;
+    public List<string> Columnas { get; set; } = [];
 }

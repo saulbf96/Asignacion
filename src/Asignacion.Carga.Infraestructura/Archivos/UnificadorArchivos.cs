@@ -108,14 +108,24 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
 
             var encabezados = EncabezadosComunes(fuente, unicos, fecha, ct);
             var corrector = new CorrectorColumnas(encabezados, fuente.CorreccionesColumnas);
+            var detector = new DetectorFilasRepetidas();
+            var enBlanco = _opciones.ColumnasEnBlanco.GetValueOrDefault(fuente.Nombre);
+            var insertador = new InsertadorColumnasEnBlanco(encabezados, enBlanco?.DespuesDe, enBlanco?.Columnas);
             var movidos = 0;
 
             var rutaUnificado = Path.Combine(temporal, nombreSalida);
-            var filas = EscritorExcelOpenXml.Escribir(rutaUnificado, fuente.HojaSalida, encabezados,
-                FilasDe(fuente, unicos, encabezados, corrector, fecha, m => movidos += m, ct), ct);
+            var filas = EscritorExcelOpenXml.Escribir(rutaUnificado, fuente.HojaSalida, [.. insertador.Encabezados],
+                FilasDe(fuente, unicos, encabezados, corrector, fecha, m => movidos += m, ct)
+                    .Where(detector.EsNueva)       // las repetidas se comparan con los campos originales
+                    .Select(insertador.Aplicar), ct);
+
+            if (insertador.Agregadas > 0)
+                _log.LogInformation("Se agregaron {Agregadas} columna(s) en blanco después de {DespuesDe}.", insertador.Agregadas, enBlanco!.DespuesDe);
 
             if (corrector.TieneCorrecciones)
                 _log.LogInformation("Correcciones de columnas aplicadas en {Movidos} fila(s).", movidos);
+            if (detector.Repetidas > 0)
+                _log.LogWarning("{Repetidas} fila(s) venían repetidas (todos los campos iguales); se dejó una sola de cada una.", detector.Repetidas);
 
             var ahora = DateTime.Now;
             return new ArchivoUnificado(
@@ -126,6 +136,7 @@ internal sealed class UnificadorArchivos : IUnificadorArchivos
                 ArchivosUnificados: unicos.Count,
                 ArchivosRepetidos: repetidos,
                 Filas: filas,
+                FilasRepetidas: detector.Repetidas,
                 CarpetaTemporal: temporal);
         }
         catch

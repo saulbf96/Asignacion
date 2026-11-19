@@ -36,3 +36,6 @@ public sealed class OpcionesCorreo
 
     public int TiempoEsperaSegundos { get; set; } = 30;
 }
+
+
+

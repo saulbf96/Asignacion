@@ -94,6 +94,50 @@ public class UnificadorArchivosTests : IDisposable
     }
 
     [Fact]
+    public async Task Fila_identica_en_varios_archivos_o_en_el_mismo_queda_una_sola_y_si_cambia_un_campo_quedan_ambas()
+    {
+        const string repetida = "1-1-9|ANA|MAXIMUS||19/11/2026|100";
+        // La misma fila en 3 archivos distintos y además 2 veces en el primero
+        Excel(Path.Combine(_entrada, "a.xlsx"), repetida, "1-1-1|LUIS|HIBRIDO||19/11/2026|5", repetida);
+        Excel(Path.Combine(_entrada, "b.xlsx"), repetida);
+        // Misma cuenta pero con un campo distinto (SALDO): se queda
+        Excel(Path.Combine(_entrada, "c.xlsx"), repetida, "1-1-9|ANA|MAXIMUS||19/11/2026|200");
+
+        var u = await _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None);
+
+        Assert.NotNull(u);
+        Assert.Equal(3, u.Filas);          // 1-1-9 (100), 1-1-1, 1-1-9 (200)
+        Assert.Equal(3, u.FilasRepetidas); // 4 copias de la misma fila → se quedó 1
+        var filas = await new LectorExcelOpenXml().LeerFilasAsync(u.Lectura, "Cartera", 1, CancellationToken.None).ToListAsync();
+        Assert.Equal([100d, 200d], filas.Where(f => (string?)f.Valores["CLIENTE_UNICO"] == "1-1-9").Select(f => f.Valores["SALDO"]));
+    }
+
+    [Fact]
+    public async Task Agrega_columnas_en_blanco_despues_de_CLIENTE_UNICO_sin_mover_los_datos()
+    {
+        var unificador = new UnificadorArchivos(
+            Options.Create(new OpcionesUnificacion
+            {
+                VariableContrasena = Variable,
+                CarpetaTemporal = Path.Combine(_raiz, "tmp"),
+                ColumnasEnBlanco = { ["legal"] = new ColumnasEnBlanco { DespuesDe = "CLIENTE_UNICO", Columnas = ["NUEVA/REASIGNADA", "TIPO_ASIG", "SUB TIPO", "ESTATUS_TEL"] } }
+            }),
+            NullLogger<UnificadorArchivos>.Instance);
+        Excel(Path.Combine(_entrada, "a.xlsx"), "1-1-1|ANA|MAXIMUS||19/11/2026|100");
+
+        var u = await unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None);
+
+        var lector = new LectorExcelOpenXml();
+        var encabezados = await lector.LeerEncabezadosAsync(u!.Lectura, "Cartera", 1, CancellationToken.None);
+        Assert.Equal(["CLIENTE_UNICO", "NUEVA/REASIGNADA", "TIPO_ASIG", "SUB TIPO", "ESTATUS_TEL", "NOMBRE_CTE", "GESTORES", "TIPO_GESTION_", "FECHA_ASIGNACION", "SALDO"], encabezados);
+        var fila = (await lector.LeerFilasAsync(u.Lectura, "Cartera", 1, CancellationToken.None).ToListAsync()).Single();
+        Assert.Equal("1-1-1", fila.Valores["CLIENTE_UNICO"]);
+        Assert.Null(fila.Valores.GetValueOrDefault("TIPO_ASIG"));
+        Assert.Equal("ANA", fila.Valores["NOMBRE_CTE"]);
+        Assert.Equal(100d, fila.Valores["SALDO"]);
+    }
+
+    [Fact]
     public async Task Entrada_vacia_devuelve_null()
     {
         Assert.Null(await _unificador.UnificarAsync(Fuente(), Hoy, CancellationToken.None));
